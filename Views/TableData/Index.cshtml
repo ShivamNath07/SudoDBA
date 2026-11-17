@@ -1,0 +1,124 @@
+﻿@model System.Data.DataTable
+@{
+    ViewBag.Title = "Sudo DBA - Core Table Manager";
+    string currentTable = ViewBag.CurrentTable as string;
+    string pkCol = ViewBag.PrimaryKeyCol as string;
+}
+
+<h2>Sudo DBA Dashboard</h2>
+
+<!-- Navigation Bar Icons for Core Tables -->
+<div style="background: #2c3e50; padding: 12px; border-radius: 6px; margin-bottom: 20px;">
+    <span style="color: white; font-weight: bold; margin-right: 15px;">Tables:</span>
+    <a href="@Url.Action("Index", "TableData", new { tableName = "PackagesForms" })" class="btn @(currentTable == "PackagesForms" ? "btn-primary" : "btn-default")" style="color:white; margin-right: 5px; text-decoration:none; padding: 6px 12px; background: @(currentTable == "PackagesForms" ? "#2980b9" : "#34495e"); border-radius:4px;">Forms</a>
+    <a href="@Url.Action("Index", "TableData", new { tableName = "InlineDetails" })" class="btn @(currentTable == "InlineDetails" ? "btn-primary" : "btn-default")" style="color:white; margin-right: 5px; text-decoration:none; padding: 6px 12px; background: @(currentTable == "InlineDetails" ? "#2980b9" : "#34495e"); border-radius:4px;">Inlines</a>
+    <a href="@Url.Action("Index", "TableData", new { tableName = "DCW" })" class="btn @(currentTable == "DCW" ? "btn-primary" : "btn-default")" style="color:white; margin-right: 5px; text-decoration:none; padding: 6px 12px; background: @(currentTable == "DCW" ? "#2980b9" : "#34495e"); border-radius:4px;">DCW</a>
+    <a href="@Url.Action("Index", "TableData", new { tableName = "CoverSheetinfo" })" class="btn @(currentTable == "CoverSheetinfo" ? "btn-primary" : "btn-default")" style="color:white; margin-right: 15px; text-decoration:none; padding: 6px 12px; background: @(currentTable == "CoverSheetinfo" ? "#2980b9" : "#34495e"); border-radius:4px;">Coversheet</a>
+
+    <!-- God Mode Placeholder Link (Restricted to Admins later) -->
+    <a href="#" onclick="alert('God Mode: Restricted to Admins for raw script execution and backup maintenance.'); return false;" style="color: #f1c40f; text-decoration:none; font-weight: bold; float: right; padding: 6px 12px;">⚡ God Mode</a>
+</div>
+
+<h3>Current View: <strong>@currentTable</strong></h3>
+
+@if (TempData["Error"] != null)
+{
+    <div style="background-color: #f8d7da; color: #721c24; padding: 12px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #f5c6cb;">
+        @TempData["Error"]
+    </div>
+}
+@if (TempData["Success"] != null)
+{
+    <div style="background-color: #d4edda; color: #155724; padding: 12px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #c3e6cb;">
+        @TempData["Success"]
+    </div>
+}
+
+<!-- Mandatory PCR Number Input Box -->
+<div style="background: #eef2f3; padding: 15px; margin-bottom: 20px; border-radius: 5px; border: 1px solid #dcdde1;">
+    <label><strong>PCR Number (Required before saving any updates):</strong></label>
+    <input type="text" id="globalPCR" class="form-control" placeholder="e.g., PCR-8997" style="width: 250px; display: inline-block; margin-left: 10px; padding: 5px;" required />
+</div>
+
+<!-- Data Grid Display -->
+<div style="overflow-x:auto; max-height: 600px; border: 1px solid #ccc;">
+    <table border="1" cellpadding="8" cellspacing="0" style="width:100%; border-collapse: collapse; background: white;">
+        <thead>
+            <tr style="background-color: #34495e; color: white; position: sticky; top: 0;">
+                @foreach (System.Data.DataColumn col in Model.Columns)
+                {
+                    <th>@col.ColumnName</th>
+                }
+                <th style="text-align: center;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (System.Data.DataRow row in Model.Rows)
+            {
+                var rowKey = row[pkCol].ToString();
+                <tr>
+                    @foreach (System.Data.DataColumn col in Model.Columns)
+                    {
+                        <td>
+                            <span class="view-mode">@row[col.ColumnName]</span>
+                            <input type="text" class="edit-mode form-control" value="@row[col.ColumnName]" style="display:none; width: 100%;" data-column="@col.ColumnName" />
+                        </td>
+                    }
+                    <td style="text-align: center; white-space: nowrap;">
+                        <button type="button" class="btn-edit" onclick="toggleEdit(this)" style="padding: 3px 10px; background: #2980b9; color: white; border: none; border-radius: 3px; cursor: pointer;">Edit</button>
+                        <button type="button" class="btn-save" style="display:none; padding: 3px 10px; background: #27ae60; color: white; border: none; border-radius: 3px; cursor: pointer;" onclick="saveRow(this, '@rowKey', '@currentTable')">Save</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- Client-side script for inline editing and PCR submission -->
+<script>
+    function toggleEdit(button) {
+        var row = button.closest('tr');
+        row.querySelectorAll('.view-mode').forEach(el => el.style.display = 'none');
+        row.querySelectorAll('.edit-mode').forEach(el => el.style.display = 'block');
+
+        row.querySelector('.btn-edit').style.display = 'none';
+        row.querySelector('.btn-save').style.display = 'inline-block';
+    }
+
+    function saveRow(button, recordKey, tableName) {
+        var pcr = document.getElementById('globalPCR').value.trim();
+        if (!pcr) {
+            alert("Please enter a PCR Number at the top before saving changes!");
+            document.getElementById('globalPCR').focus();
+            return;
+        }
+
+        var row = button.closest('tr');
+        // Find the input that was changed (or grab the first active edit input)
+        var input = row.querySelector('.edit-mode');
+        var columnName = input.getAttribute('data-column');
+        var newValue = input.value;
+
+        // Dynamically create a form to post data securely
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '@Url.Action("UpdateRow", "TableData")';
+
+        var addField = function(name, value) {
+            var field = document.createElement('input');
+            field.type = 'hidden';
+            field.name = name;
+            field.value = value;
+            form.appendChild(field);
+        };
+
+        addField('tableName', tableName);
+        addField('recordKey', recordKey);
+        addField('pcrNumber', pcr);
+        addField('columnName', columnName);
+        addField('newValue', newValue);
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+</script>
